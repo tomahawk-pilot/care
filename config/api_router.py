@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter, SimpleRouter
 from rest_framework_nested.routers import NestedSimpleRouter
 
 from care.facility.api.viewsets.ambulance import AmbulanceCreateViewSet, AmbulanceViewSet
-from care.facility.api.viewsets.facility import FacilityViewSet
+from care.facility.api.viewsets.facility import FacilityViewSet, AllFacilityViewSet
 from care.facility.api.viewsets.facility_capacity import FacilityCapacityViewSet
 from care.facility.api.viewsets.hospital_doctor import HospitalDoctorViewSet
 from care.facility.api.viewsets.patient import FacilityPatientStatsHistoryViewSet, PatientSearchViewSet, PatientViewSet
@@ -23,6 +23,7 @@ from care.users.api.viewsets.users import UserViewSet
 
 from care.facility.summarisation.facility_capacity import FacilityCapacitySummaryViewSet
 from care.facility.summarisation.patient_summary import PatientSummaryViewSet
+from care.facility.summarisation.tests_summary import TestsSummaryViewSet
 
 if settings.DEBUG:
     router = DefaultRouter()
@@ -31,6 +32,7 @@ else:
 
 router.register("users", UserViewSet)
 router.register("facility", FacilityViewSet)
+router.register("getallfacilities", AllFacilityViewSet)
 
 router.register("ambulance/create", AmbulanceCreateViewSet)
 router.register("ambulance", AmbulanceViewSet)
@@ -53,6 +55,8 @@ router.register("patient_search", PatientScopedSearchViewSet)
 # Summarisation
 router.register("facility_summary", FacilityCapacitySummaryViewSet, basename="summary-facility")
 router.register("patient_summary", PatientSummaryViewSet, basename="summary-patient")
+router.register("tests_summary", TestsSummaryViewSet, basename="summary-tests")
+
 
 router.register("items", FacilityInventoryItemViewSet)
 

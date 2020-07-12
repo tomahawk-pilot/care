@@ -3,15 +3,19 @@ from django.db.models.query_utils import Q
 from django_filters import rest_framework as filters
 from dry_rest_permissions.generics import DRYPermissionFiltersBase, DRYPermissions
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
+from care.facility.api.serializers.patient_icmr import PatientICMRSerializer
 from care.facility.api.serializers.patient_sample import (
     PatientSampleDetailSerializer,
     PatientSamplePatchSerializer,
     PatientSampleSerializer,
 )
 from care.facility.models import PatientConsultation, PatientRegistration, PatientSample, User
+from care.facility.models.patient_icmr import PatientSampleICMR
 
 
 class PatientSampleFilterBackend(DRYPermissionFiltersBase):
@@ -20,6 +24,7 @@ class PatientSampleFilterBackend(DRYPermissionFiltersBase):
             pass
         else:
             q_objects = Q(patient__facility__users__id__exact=request.user.id)
+            q_objects |= Q(testing_facility__users__id__exact=request.user.id)
             if request.user.user_type >= User.TYPE_VALUE_MAP["StateLabAdmin"]:
                 q_objects |= Q(consultation__facility__state=request.user.state)
             elif request.user.user_type >= User.TYPE_VALUE_MAP["DistrictLabAdmin"]:
@@ -74,6 +79,12 @@ class PatientSampleViewSet(viewsets.ModelViewSet):
         if self.kwargs.get("patient_external_id") is not None:
             queryset = queryset.filter(patient__external_id=self.kwargs.get("patient_external_id"))
         return queryset
+
+    @action(detail=True, methods=["GET"])
+    def icmr_sample(self, *args, **kwargs):
+        patient = self.get_object()
+        patient.__class__ = PatientSampleICMR
+        return Response(data=PatientICMRSerializer(patient).data)
 
     def list(self, request, *args, **kwargs):
         """
