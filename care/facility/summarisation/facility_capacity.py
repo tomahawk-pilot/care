@@ -1,4 +1,5 @@
-from datetime import timedelta
+from datetime import timedelta, datetime
+from django.utils.timezone import localtime, now
 
 from celery.decorators import periodic_task
 from celery.schedules import crontab
@@ -34,13 +35,21 @@ class FacilitySummarySerializer(serializers.ModelSerializer):
 class FacilitySummaryFilter(filters.FilterSet):
     start_date = filters.DateFilter(field_name="created_date", lookup_expr="gte")
     end_date = filters.DateFilter(field_name="created_date", lookup_expr="lte")
+    facility = filters.UUIDFilter(field_name="facility__external_id")
+    district = filters.NumberFilter(field_name="facility__district__id")
+    local_body = filters.NumberFilter(field_name="facility__local_body__id")
+    state = filters.NumberFilter(field_name="facility__state__id")
 
 
 class FacilityCapacitySummaryViewSet(
-    RetrieveModelMixin, ListModelMixin, GenericViewSet,
+    ListModelMixin, GenericViewSet,
 ):
     lookup_field = "external_id"
-    queryset = FacilityRelatedSummary.objects.filter(s_type="FacilityCapacity").order_by("-created_date")
+    queryset = (
+        FacilityRelatedSummary.objects.filter(s_type="FacilityCapacity")
+        .order_by("-created_date")
+        .select_related("facility", "facility__state", "facility__district", "facility__local_body")
+    )
     permission_classes = (IsAuthenticated,)
     serializer_class = FacilitySummarySerializer
 
@@ -58,15 +67,13 @@ class FacilityCapacitySummaryViewSet(
             return queryset.filter(facility__state=user.state)
         return queryset.filter(facility__users__id__exact=user.id)
 
-    def get_object(self):
-        return get_object_or_404(self.get_queryset(), facility__external_id=self.kwargs.get("external_id"))
-
 
 def FacilityCapacitySummary():
     capacity_objects = FacilityCapacity.objects.all().select_related(
         "facility", "facility__state", "facility__district", "facility__local_body"
     )
     capacity_summary = {}
+    current_date = localtime(now()).replace(hour=0, minute=0, second=0, microsecond=0)
     for capacity_object in capacity_objects:
         facility_id = capacity_object.facility.id
         if facility_id not in capacity_summary:
@@ -75,12 +82,22 @@ def FacilityCapacitySummary():
         capacity_summary[facility_id]["availability"].append(FacilityCapacitySerializer(capacity_object).data)
 
     for i in list(capacity_summary.keys()):
-        FacilityRelatedSummary(s_type="FacilityCapacity", facility_id=i, data=capacity_summary[i]).save()
+        facility_summary_obj = None
+        if FacilityRelatedSummary.objects.filter(
+            s_type="FacilityCapacity", facility_id=i, created_date__gte=current_date
+        ).exists():
+            facility_summary_obj = FacilityRelatedSummary.objects.get(
+                s_type="FacilityCapacity", facility_id=i, created_date__gte=current_date
+            )
+        else:
+            facility_summary_obj = FacilityRelatedSummary(s_type="FacilityCapacity", facility_id=i)
+        facility_summary_obj.data = capacity_summary[i]
+        facility_summary_obj.save()
 
     return True
 
 
-@periodic_task(run_every=crontab(hour=23, minute=59))
+@periodic_task(run_every=crontab(minute="*/5"))
 def run_midnight():
     FacilityCapacitySummary()
     print("Summarised Capacities")
